@@ -1,12 +1,11 @@
 import { AppBar, Toolbar, Typography, Button, Box } from '@mui/material'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
-interface NavbarProps {
-  currentPage: 'home' | 'dashboard'
-  onNavigate: (page: 'home' | 'dashboard') => void
-}
+export default function Navbar() {
+  const location = useLocation()
+  const navigate = useNavigate()
 
-export default function Navbar({ currentPage, onNavigate }: NavbarProps) {
   const handleLogout = async () => {
     await supabase.auth.signOut()
   }
@@ -20,9 +19,9 @@ export default function Navbar({ currentPage, onNavigate }: NavbarProps) {
         <Box sx={{ flexGrow: 1, display: 'flex', gap: 1 }}>
           <Button
             color="inherit"
-            onClick={() => onNavigate('home')}
+            onClick={() => navigate('/')}
             sx={{
-              borderBottom: currentPage === 'home' ? '2px solid white' : 'none',
+              borderBottom: location.pathname === '/' ? '2px solid white' : 'none',
               borderRadius: 0
             }}
           >
@@ -30,9 +29,9 @@ export default function Navbar({ currentPage, onNavigate }: NavbarProps) {
           </Button>
           <Button
             color="inherit"
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => navigate('/dashboard')}
             sx={{
-              borderBottom: currentPage === 'dashboard' ? '2px solid white' : 'none',
+              borderBottom: location.pathname === '/dashboard' ? '2px solid white' : 'none',
               borderRadius: 0
             }}
           >
