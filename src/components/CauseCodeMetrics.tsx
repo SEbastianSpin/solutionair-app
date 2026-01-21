@@ -53,7 +53,7 @@ function isResolvedOnTime(resolvedAt: string, scheduledUtc: string): boolean {
   return resolved < scheduled
 }
 
-type TimePeriod = 'today' | 'this_week' | 'this_month' | 'last_month' | 'all_time'
+type TimePeriod = 'today' | 'this_week' | 'this_month' | 'last_month' | 'last_3_months'
 
 function getDateRangeForPeriod(period: TimePeriod): { start: Date; end: Date } {
   const now = new Date()
@@ -84,9 +84,11 @@ function getDateRangeForPeriod(period: TimePeriod): { start: Date; end: Date } {
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1)
       return { start: startOfLastMonth, end: endOfLastMonth }
     }
-    case 'all_time':
-    default:
-      return { start: new Date(0), end: new Date(8640000000000000) }
+    case 'last_3_months':
+    default: {
+      const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+      return { start: threeMonthsAgo, end: new Date(8640000000000000) }
+    }
   }
 }
 
@@ -100,7 +102,7 @@ export default function CauseCodeMetrics() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(0)
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>('all_time')
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('last_3_months')
 
   const filteredData = useMemo(() => {
     if (!data) return null
@@ -346,7 +348,7 @@ export default function CauseCodeMetrics() {
           <ToggleButton value="this_week">This Week</ToggleButton>
           <ToggleButton value="this_month">This Month</ToggleButton>
           <ToggleButton value="last_month">Last Month</ToggleButton>
-          <ToggleButton value="all_time">All Time</ToggleButton>
+          <ToggleButton value="last_3_months">Last 3 Months</ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
