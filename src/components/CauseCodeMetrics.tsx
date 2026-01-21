@@ -21,7 +21,7 @@ function formatDateTime(value: string | null): string {
   return new Date(value).toLocaleString()
 }
 
-function formatResolutionTime(hours: number): string {
+function formatDuration(hours: number): string {
   if (hours < 1) {
     return `${Math.round(hours * 60)} min`
   }
@@ -30,6 +30,25 @@ function formatResolutionTime(hours: number): string {
   }
   const days = hours / 24
   return `${days.toFixed(1)} days`
+}
+
+function getWaitingTimeHours(createdAt: string): number {
+  const created = new Date(createdAt)
+  const now = new Date()
+  return (now.getTime() - created.getTime()) / (1000 * 60 * 60)
+}
+
+function isCreatedOnTime(createdAt: string, scheduledUtc: string): boolean {
+  const created = new Date(createdAt)
+  const scheduled = new Date(scheduledUtc)
+  const fifteenMinBefore = new Date(scheduled.getTime() - 15 * 60 * 1000)
+  return created <= fifteenMinBefore
+}
+
+function isResolvedOnTime(resolvedAt: string, scheduledUtc: string): boolean {
+  const resolved = new Date(resolvedAt)
+  const scheduled = new Date(scheduledUtc)
+  return resolved < scheduled
 }
 
 export default function CauseCodeMetrics() {
@@ -93,6 +112,26 @@ export default function CauseCodeMetrics() {
       valueFormatter: (params: ValueFormatterParams) => formatDateTime(params.value),
       width: 180,
     },
+    {
+      headerName: 'Created On Time',
+      filter: true,
+      sortable: true,
+      valueGetter: (params) => params.data ? isCreatedOnTime(params.data.created_at, params.data.d_scheduled_time_utc) : false,
+      valueFormatter: (params: ValueFormatterParams) => params.value ? 'Yes' : 'No',
+      cellStyle: (params) => ({
+        color: params.value ? '#2e7d32' : '#d32f2f',
+        fontWeight: 500,
+      }),
+      width: 130,
+    },
+    {
+      headerName: 'Waiting Time',
+      filter: 'agNumberColumnFilter',
+      sortable: true,
+      valueGetter: (params) => params.data ? getWaitingTimeHours(params.data.created_at) : 0,
+      valueFormatter: (params: ValueFormatterParams) => formatDuration(params.value),
+      width: 130,
+    },
   ], [])
 
   const resolvedColumnDefs: ColDef<ResolvedFlight>[] = useMemo(() => [
@@ -118,6 +157,14 @@ export default function CauseCodeMetrics() {
       width: 100,
     },
     {
+      field: 'd_scheduled_time_utc',
+      headerName: 'Scheduled (UTC)',
+      filter: true,
+      sortable: true,
+      valueFormatter: (params: ValueFormatterParams) => formatDateTime(params.value),
+      width: 180,
+    },
+    {
       field: 'new_cause_code',
       headerName: 'Resolved Cause',
       filter: true,
@@ -133,6 +180,18 @@ export default function CauseCodeMetrics() {
       width: 180,
     },
     {
+      headerName: 'Created On Time',
+      filter: true,
+      sortable: true,
+      valueGetter: (params) => params.data ? isCreatedOnTime(params.data.created_at, params.data.d_scheduled_time_utc) : false,
+      valueFormatter: (params: ValueFormatterParams) => params.value ? 'Yes' : 'No',
+      cellStyle: (params) => ({
+        color: params.value ? '#2e7d32' : '#d32f2f',
+        fontWeight: 500,
+      }),
+      width: 130,
+    },
+    {
       field: 'resolved_at',
       headerName: 'Resolved At',
       filter: true,
@@ -141,12 +200,24 @@ export default function CauseCodeMetrics() {
       width: 180,
     },
     {
+      headerName: 'Resolved On Time',
+      filter: true,
+      sortable: true,
+      valueGetter: (params) => params.data ? isResolvedOnTime(params.data.resolved_at, params.data.d_scheduled_time_utc) : false,
+      valueFormatter: (params: ValueFormatterParams) => params.value ? 'Yes' : 'No',
+      cellStyle: (params) => ({
+        color: params.value ? '#2e7d32' : '#d32f2f',
+        fontWeight: 500,
+      }),
+      width: 140,
+    },
+    {
       field: 'resolution_time_hours',
       headerName: 'Resolution Time',
       filter: 'agNumberColumnFilter',
       sortable: true,
-      valueFormatter: (params: ValueFormatterParams) => formatResolutionTime(params.value),
-      width: 140,
+      valueFormatter: (params: ValueFormatterParams) => formatDuration(params.value),
+      width: 130,
     },
   ], [])
 
@@ -179,6 +250,29 @@ export default function CauseCodeMetrics() {
     ? data.resolvedFlights.reduce((sum, f) => sum + f.resolution_time_hours, 0) / data.resolvedFlights.length
     : 0
 
+  // Total flights = pending + resolved
+  const totalFlights = data.unknownFlights.length + data.resolvedFlights.length
+
+  // Created On Time: includes both pending and resolved
+  const createdOnTimeCountPending = data.unknownFlights.filter(f =>
+    isCreatedOnTime(f.created_at, f.d_scheduled_time_utc)
+  ).length
+  const createdOnTimeCountResolved = data.resolvedFlights.filter(f =>
+    isCreatedOnTime(f.created_at, f.d_scheduled_time_utc)
+  ).length
+  const createdOnTimeCount = createdOnTimeCountPending + createdOnTimeCountResolved
+  const createdOnTimePercent = totalFlights > 0
+    ? ((createdOnTimeCount / totalFlights) * 100).toFixed(1)
+    : '0.0'
+
+  // Resolved On Time: resolved before scheduled, pending count as NOT on time
+  const resolvedOnTimeCount = data.resolvedFlights.filter(f =>
+    isResolvedOnTime(f.resolved_at, f.d_scheduled_time_utc)
+  ).length
+  const resolvedOnTimePercent = totalFlights > 0
+    ? ((resolvedOnTimeCount / totalFlights) * 100).toFixed(1)
+    : '0.0'
+
   return (
     <Box>
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
@@ -202,10 +296,34 @@ export default function CauseCodeMetrics() {
 
         <Paper sx={{ p: 2, flex: '1 1 150px', textAlign: 'center' }}>
           <Typography variant="h4" color="primary.main">
-            {formatResolutionTime(avgResolutionTime)}
+            {formatDuration(avgResolutionTime)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Avg Resolution Time
+          </Typography>
+        </Paper>
+
+        <Paper sx={{ p: 2, flex: '1 1 150px', textAlign: 'center' }}>
+          <Typography variant="h4" color={Number(createdOnTimePercent) >= 80 ? 'success.main' : 'warning.main'}>
+            {createdOnTimePercent}%
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Created On Time
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            ({createdOnTimeCount}/{totalFlights})
+          </Typography>
+        </Paper>
+
+        <Paper sx={{ p: 2, flex: '1 1 150px', textAlign: 'center' }}>
+          <Typography variant="h4" color={Number(resolvedOnTimePercent) >= 80 ? 'success.main' : 'warning.main'}>
+            {resolvedOnTimePercent}%
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Resolved On Time
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            ({resolvedOnTimeCount}/{totalFlights})
           </Typography>
         </Paper>
       </Box>
