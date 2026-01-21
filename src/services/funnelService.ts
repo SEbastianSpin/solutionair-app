@@ -13,12 +13,14 @@ export interface FunnelRow {
   period: Period
   flights_count: number
   disrupted_count: number
+  ec261_compensable_count: number
   campaigns_count: number
 }
 
 export interface FunnelData {
   flights: number
   disruptedFlights: number
+  ec261Compensable: number
   campaigns: number
 }
 
@@ -57,6 +59,7 @@ export function getFunnelDataForPeriod(rows: FunnelRow[], period: Period): Funne
   return {
     flights: row?.flights_count ?? 0,
     disruptedFlights: row?.disrupted_count ?? 0,
+    ec261Compensable: row?.ec261_compensable_count ?? 0,
     campaigns: row?.campaigns_count ?? 0,
   }
 }

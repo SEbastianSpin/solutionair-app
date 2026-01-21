@@ -63,8 +63,11 @@ export default function FlightsFunnel() {
   const disruptedRate = data.flights > 0
     ? ((data.disruptedFlights / data.flights) * 100).toFixed(1)
     : '0.0'
-  const campaignRate = data.disruptedFlights > 0
-    ? ((data.campaigns / data.disruptedFlights) * 100).toFixed(1)
+  const ec261Rate = data.disruptedFlights > 0
+    ? ((data.ec261Compensable / data.disruptedFlights) * 100).toFixed(1)
+    : '0.0'
+  const campaignRate = data.ec261Compensable > 0
+    ? ((data.campaigns / data.ec261Compensable) * 100).toFixed(1)
     : '0.0'
 
   const funnelData = [
@@ -77,6 +80,11 @@ export default function FlightsFunnel() {
       id: 'disrupted',
       value: data.disruptedFlights,
       label: 'Disrupted Flights',
+    },
+    {
+      id: 'ec261',
+      value: data.ec261Compensable,
+      label: 'EC261 Compensable',
     },
     {
       id: 'campaigns',
@@ -122,6 +130,14 @@ export default function FlightsFunnel() {
           <Typography variant="body2" color="text.secondary">Disrupted Flights</Typography>
         </Box>
         <Box sx={{ textAlign: 'center', px: 2 }}>
+          <Typography variant="h6" color="primary">{ec261Rate}%</Typography>
+          <Typography variant="caption" color="text.secondary">→</Typography>
+        </Box>
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="h4">{data.ec261Compensable}</Typography>
+          <Typography variant="body2" color="text.secondary">EC261 Compensable</Typography>
+        </Box>
+        <Box sx={{ textAlign: 'center', px: 2 }}>
           <Typography variant="h6" color="primary">{campaignRate}%</Typography>
           <Typography variant="caption" color="text.secondary">→</Typography>
         </Box>
@@ -140,7 +156,6 @@ export default function FlightsFunnel() {
           borderColor={{ from: 'color', modifiers: [['darker', 0.8]] }}
           labelColor={{ from: 'color', modifiers: [['darker', 2.5]] }}
           borderWidth={20}
-
           beforeSeparatorLength={100}
           beforeSeparatorOffset={20}
           afterSeparatorLength={100}

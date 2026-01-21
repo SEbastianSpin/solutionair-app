@@ -15,12 +15,15 @@ import BarChartIcon from '@mui/icons-material/BarChart'
 import TableChartIcon from '@mui/icons-material/TableChart'
 import FilterAltIcon from '@mui/icons-material/FilterAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
+import AssessmentIcon from '@mui/icons-material/Assessment'
 import FlightsFunnel from '../components/FlightsFunnel'
+import CauseCodeMetrics from '../components/CauseCodeMetrics'
 
 const drawerWidth = 240
 
 const menuItems = [
   { id: 'overview', label: 'Overview', icon: <HomeIcon /> },
+  { id: 'metrics', label: 'Cause Code Metrics', icon: <AssessmentIcon /> },
   { id: 'charts', label: 'Charts', icon: <BarChartIcon /> },
   { id: 'tables', label: 'Tables', icon: <TableChartIcon /> },
   { id: 'funnel', label: 'Funnel', icon: <FilterAltIcon /> },
@@ -94,6 +97,12 @@ export default function Dashboard() {
               <Typography variant="h4">--</Typography>
             </Paper>
           </Box>
+        )}
+
+        {activeSection === 'metrics' && (
+          <Paper sx={{ p: 3 }}>
+            <CauseCodeMetrics />
+          </Paper>
         )}
 
         {activeSection === 'charts' && (
