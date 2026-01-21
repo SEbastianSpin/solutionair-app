@@ -10,6 +10,8 @@ import {
   Paper,
   Tabs,
   Tab,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material'
 import { getCauseCodeData } from '../services/causeCodeMetricsService'
 import type { CauseCodeData, UnknownFlight, ResolvedFlight } from '../services/causeCodeMetricsService'
@@ -51,11 +53,63 @@ function isResolvedOnTime(resolvedAt: string, scheduledUtc: string): boolean {
   return resolved < scheduled
 }
 
+type TimePeriod = 'today' | 'this_week' | 'this_month' | 'last_month' | 'all_time'
+
+function getDateRangeForPeriod(period: TimePeriod): { start: Date; end: Date } {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+  switch (period) {
+    case 'today': {
+      const endOfDay = new Date(today)
+      endOfDay.setDate(endOfDay.getDate() + 1)
+      return { start: today, end: endOfDay }
+    }
+    case 'this_week': {
+      const startOfWeek = new Date(today)
+      const day = startOfWeek.getDay()
+      const diff = day === 0 ? 6 : day - 1 // Monday as start of week
+      startOfWeek.setDate(startOfWeek.getDate() - diff)
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(endOfWeek.getDate() + 7)
+      return { start: startOfWeek, end: endOfWeek }
+    }
+    case 'this_month': {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      return { start: startOfMonth, end: endOfMonth }
+    }
+    case 'last_month': {
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      return { start: startOfLastMonth, end: endOfLastMonth }
+    }
+    case 'all_time':
+    default:
+      return { start: new Date(0), end: new Date(8640000000000000) }
+  }
+}
+
+function isInDateRange(dateStr: string, range: { start: Date; end: Date }): boolean {
+  const date = new Date(dateStr)
+  return date >= range.start && date < range.end
+}
+
 export default function CauseCodeMetrics() {
   const [data, setData] = useState<CauseCodeData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(0)
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>('all_time')
+
+  const filteredData = useMemo(() => {
+    if (!data) return null
+    const range = getDateRangeForPeriod(timePeriod)
+    return {
+      unknownFlights: data.unknownFlights.filter(f => isInDateRange(f.created_at, range)),
+      resolvedFlights: data.resolvedFlights.filter(f => isInDateRange(f.created_at, range)),
+    }
+  }, [data, timePeriod])
 
   useEffect(() => {
     async function fetchData() {
@@ -241,23 +295,23 @@ export default function CauseCodeMetrics() {
     )
   }
 
-  if (!data) {
+  if (!data || !filteredData) {
     return null
   }
 
-  // Calculate stats
-  const avgResolutionTime = data.resolvedFlights.length > 0
-    ? data.resolvedFlights.reduce((sum, f) => sum + f.resolution_time_hours, 0) / data.resolvedFlights.length
+  // Calculate stats using filtered data
+  const avgResolutionTime = filteredData.resolvedFlights.length > 0
+    ? filteredData.resolvedFlights.reduce((sum, f) => sum + f.resolution_time_hours, 0) / filteredData.resolvedFlights.length
     : 0
 
   // Total flights = pending + resolved
-  const totalFlights = data.unknownFlights.length + data.resolvedFlights.length
+  const totalFlights = filteredData.unknownFlights.length + filteredData.resolvedFlights.length
 
   // Created On Time: includes both pending and resolved
-  const createdOnTimeCountPending = data.unknownFlights.filter(f =>
+  const createdOnTimeCountPending = filteredData.unknownFlights.filter(f =>
     isCreatedOnTime(f.created_at, f.d_scheduled_time_utc)
   ).length
-  const createdOnTimeCountResolved = data.resolvedFlights.filter(f =>
+  const createdOnTimeCountResolved = filteredData.resolvedFlights.filter(f =>
     isCreatedOnTime(f.created_at, f.d_scheduled_time_utc)
   ).length
   const createdOnTimeCount = createdOnTimeCountPending + createdOnTimeCountResolved
@@ -266,19 +320,40 @@ export default function CauseCodeMetrics() {
     : '0.0'
 
   // Resolved On Time: resolved before scheduled, pending count as NOT on time
-  const resolvedOnTimeCount = data.resolvedFlights.filter(f =>
+  const resolvedOnTimeCount = filteredData.resolvedFlights.filter(f =>
     isResolvedOnTime(f.resolved_at, f.d_scheduled_time_utc)
   ).length
   const resolvedOnTimePercent = totalFlights > 0
     ? ((resolvedOnTimeCount / totalFlights) * 100).toFixed(1)
     : '0.0'
 
+  const handleTimePeriodChange = (_: React.MouseEvent<HTMLElement>, newPeriod: TimePeriod | null) => {
+    if (newPeriod !== null) {
+      setTimePeriod(newPeriod)
+    }
+  }
+
   return (
     <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <ToggleButtonGroup
+          value={timePeriod}
+          exclusive
+          onChange={handleTimePeriodChange}
+          size="small"
+        >
+          <ToggleButton value="today">Today</ToggleButton>
+          <ToggleButton value="this_week">This Week</ToggleButton>
+          <ToggleButton value="this_month">This Month</ToggleButton>
+          <ToggleButton value="last_month">Last Month</ToggleButton>
+          <ToggleButton value="all_time">All Time</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
         <Paper sx={{ p: 2, flex: '1 1 150px', textAlign: 'center' }}>
           <Typography variant="h4" color="warning.main">
-            {data.unknownFlights.length}
+            {filteredData.unknownFlights.length}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Pending Investigation
@@ -287,10 +362,10 @@ export default function CauseCodeMetrics() {
 
         <Paper sx={{ p: 2, flex: '1 1 150px', textAlign: 'center' }}>
           <Typography variant="h4" color="success.main">
-            {data.resolvedFlights.length}
+            {filteredData.resolvedFlights.length}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Resolved (Last 3 Months)
+            Resolved
           </Typography>
         </Paper>
 
@@ -330,15 +405,15 @@ export default function CauseCodeMetrics() {
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-          <Tab label={`Pending (${data.unknownFlights.length})`} />
-          <Tab label={`Resolved (${data.resolvedFlights.length})`} />
+          <Tab label={`Pending (${filteredData.unknownFlights.length})`} />
+          <Tab label={`Resolved (${filteredData.resolvedFlights.length})`} />
         </Tabs>
       </Box>
 
       {activeTab === 0 && (
         <Box sx={{ height: 400, width: '100%' }}>
           <AgGridReact<UnknownFlight>
-            rowData={data.unknownFlights}
+            rowData={filteredData.unknownFlights}
             columnDefs={unknownColumnDefs}
             defaultColDef={defaultColDef}
             pagination={true}
@@ -351,7 +426,7 @@ export default function CauseCodeMetrics() {
       {activeTab === 1 && (
         <Box sx={{ height: 400, width: '100%' }}>
           <AgGridReact<ResolvedFlight>
-            rowData={data.resolvedFlights}
+            rowData={filteredData.resolvedFlights}
             columnDefs={resolvedColumnDefs}
             defaultColDef={defaultColDef}
             pagination={true}
