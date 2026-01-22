@@ -6,6 +6,7 @@ Simple internal website for SolutionAir.
 ## Tech Stack
 - **Frontend**: React 18 + TypeScript + Vite
 - **UI Library**: MUI (Material UI)
+- **Date Picker**: @mui/x-date-pickers with dayjs
 - **Tables**: AG Grid Community (free)
 - **Charts**: Nivo (bar, line, pie, funnel)
 - **Backend**: Supabase (PostgreSQL, Auth, Storage, Realtime)
@@ -205,5 +206,42 @@ CREATE TABLE public.flights (
   CONSTRAINT flights_pkey PRIMARY KEY (id)
 );
 
+CREATE TABLE public.weather (
+  airport_iata text NOT NULL,
+  location_name text NULL,
+  location_country text NULL,
+  forecast_date text NOT NULL,
+  time_epoch timestamp with time zone NOT NULL,
+  time text NULL,
+  temp_c double precision NULL,
+  condition_text text NULL,
+  condition_icon text NULL,
+  condition_code bigint NULL,
+  wind_kph double precision NULL,
+  wind_degree bigint NULL,
+  wind_dir text NULL,
+  gust_kph double precision NULL,
+  precip_mm text NULL,
+  snow_cm text NULL,
+  will_it_rain text NULL,
+  chance_of_rain text NULL,
+  will_it_snow text NULL,
+  chance_of_snow text NULL,
+  cloud bigint NULL,
+  vis_km bigint NULL,
+  CONSTRAINT weather_pkey PRIMARY KEY (airport_iata, time_epoch)
+);
 
+## Components
+
+### Weather (src/components/Weather.tsx)
+Displays hourly weather data for a selected airport and date.
+- Uses MUI DateCalendar for date selection (restricted to today and past dates)
+- TextField for IATA airport code input
+- AG Grid table showing hourly weather data with:
+  - Weather condition icons from API
+  - Temperature, wind, gusts, precipitation, cloud cover, visibility
+  - Yellow highlighting for strong winds (>=30 kph warning, >=50 kph danger)
+  - Yellow highlighting for low visibility (<=5 km warning, <=1 km danger)
+- "Fetch Weather Data" button appears when data is incomplete (<24 hours) or missing
 
