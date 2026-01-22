@@ -590,7 +590,8 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
   }, [flightsData])
 
   // Custom layer to render moving average line
-  const MovingAvgLayer = ({ xScale, yScale }: { xScale: (v: number) => number; yScale: (v: number) => number }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const MovingAvgLayer = ({ xScale, yScale }: any) => {
     if (movingAvgData.length < 2) return null
 
     const linePoints = movingAvgData

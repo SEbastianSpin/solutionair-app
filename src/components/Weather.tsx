@@ -122,7 +122,7 @@ export default function Weather({ iata, date }: WeatherProps) {
 
       const dateStr = weatherDate.format('YYYY-MM-DD')
      
-      const { data: result, error } = await supabase.functions.invoke('get_weather', {
+      const { error } = await supabase.functions.invoke('get_weather', {
       body: { 
         date: dateStr, 
         iata: weatherIata.toUpperCase() 

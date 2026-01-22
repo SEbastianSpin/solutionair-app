@@ -39,7 +39,7 @@ export default function CaseFiles() {
       try {
         setLoading(true)
         setError(null)
-        const caseFiles = await listCaseFiles(shortId)
+        const caseFiles = await listCaseFiles(shortId!)
         setFiles(caseFiles)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load files')

@@ -9,7 +9,7 @@ import {
 } from '@mui/material'
 import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, AllCommunityModule, themeQuartz } from 'ag-grid-community'
-import type { ColDef, ValueFormatterParams, GridReadyEvent, SelectionChangedEvent } from 'ag-grid-community'
+import type { ColDef, ValueFormatterParams, SelectionChangedEvent } from 'ag-grid-community'
 import { supabase } from '../lib/supabase'
 
 ModuleRegistry.registerModules([AllCommunityModule])
@@ -249,10 +249,6 @@ export default function UnprocessedFlights() {
     resizable: true,
   }), [])
 
-  const onGridReady = useCallback((params: GridReadyEvent) => {
-    // Grid is ready
-  }, [])
-
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -296,7 +292,6 @@ export default function UnprocessedFlights() {
             defaultColDef={defaultColDef}
             rowSelection="multiple"
             suppressRowClickSelection={true}
-            onGridReady={onGridReady}
             onSelectionChanged={onSelectionChanged}
             pagination={true}
             paginationPageSize={25}
