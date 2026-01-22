@@ -18,10 +18,12 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import AssessmentIcon from '@mui/icons-material/Assessment'
 import CloudIcon from '@mui/icons-material/Cloud'
 import FlightLandIcon from '@mui/icons-material/FlightLand'
+import AnnouncementIcon from '@mui/icons-material/Announcement'
 import FlightsFunnel from '../components/FlightsFunnel'
 import CauseCodeMetrics from '../components/CauseCodeMetrics'
 import Weather from '../components/Weather'
 import AirportSituation from '../components/AirportSituation'
+import Notams from '../components/Notams'
 
 const drawerWidth = 240
 
@@ -30,6 +32,7 @@ const menuItems = [
   { id: 'metrics', label: 'Cause Code Metrics', icon: <AssessmentIcon /> },
   { id: 'airport-situation', label: 'Airport Situation', icon: <FlightLandIcon /> },
   { id: 'weather', label: 'Weather', icon: <CloudIcon /> },
+  { id: 'notams', label: 'NOTAMs', icon: <AnnouncementIcon /> },
   { id: 'charts', label: 'Charts', icon: <BarChartIcon /> },
   { id: 'tables', label: 'Tables', icon: <TableChartIcon /> },
   { id: 'funnel', label: 'Funnel', icon: <FilterAltIcon /> },
@@ -120,6 +123,12 @@ export default function Dashboard() {
         {activeSection === 'weather' && (
           <Paper sx={{ p: 3 }}>
             <Weather />
+          </Paper>
+        )}
+
+        {activeSection === 'notams' && (
+          <Paper sx={{ p: 3 }}>
+            <Notams />
           </Paper>
         )}
 

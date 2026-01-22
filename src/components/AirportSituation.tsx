@@ -1,10 +1,20 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
+  Alert,
   Box,
+  Button,
   CircularProgress,
+  FormControl,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import LockIcon from '@mui/icons-material/Lock'
+import LockOpenIcon from '@mui/icons-material/LockOpen'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
@@ -56,10 +66,106 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
   const [flightsData, setFlightsData] = useState<FlightData[]>([])
   const [loading, setLoading] = useState(false)
   const [xRange, setXRange] = useState<[number, number]>([0, 24])
+  const [hourFrom, setHourFrom] = useState(6)
+  const [hourTo, setHourTo] = useState(18)
+  const [fetching, setFetching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [fetchControlsUnlocked, setFetchControlsUnlocked] = useState(false)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const hourOptions = Array.from({ length: 24 }, (_, i) => i)
+
+  const handleHourFromChange = (value: number) => {
+    setHourFrom(value)
+    // Ensure max 12h difference
+    if (hourTo - value > 12) {
+      setHourTo(value + 12)
+    }
+    if (value >= hourTo) {
+      setHourTo(Math.min(23, value + 1))
+    }
+  }
+
+  const handleHourToChange = (value: number) => {
+    setHourTo(value)
+    // Ensure max 12h difference
+    if (value - hourFrom > 12) {
+      setHourFrom(value - 12)
+    }
+    if (value <= hourFrom) {
+      setHourFrom(Math.max(0, value - 1))
+    }
+  }
+
+  const fetchFlightsFromApi = async () => {
+    if (!airportIata || airportIata.length !== 3 || !selectedDate) return
+
+    setFetching(true)
+    setError(null)
+    try {
+      const dateStr = selectedDate.format('YYYY-MM-DD')
+      const params = new URLSearchParams({
+        iata: airportIata.toUpperCase(),
+        date: dateStr,
+        hour_from: hourFrom.toString(),
+        hour_to: hourTo.toString(),
+      })
+
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setError('No authenticated session. Please log in again.')
+        return
+      }
+
+      const response = await fetch(
+        `https://fxgezrkksmdczrcucimo.supabase.co/functions/v1/get_flights?${params}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Re-fetch data from database after API call
+      const startOfDay = selectedDate.utc().startOf('day').toISOString()
+      const endOfDay = selectedDate.utc().endOf('day').toISOString()
+
+      const { data, error } = await supabase
+        .from('flights')
+        .select('*')
+        .eq('airport_iata', airportIata.toUpperCase())
+        .gte('scheduled_time_utc', startOfDay)
+        .lte('scheduled_time_utc', endOfDay)
+        .order('uploaded_at', { ascending: false })
+
+      if (!error && data) {
+        const uniqueFlights = new Map<string, FlightData>()
+        for (const flight of data) {
+          const key = `${flight.flight_number}_${flight.scheduled_time_utc}`
+          if (!uniqueFlights.has(key)) {
+            uniqueFlights.set(key, flight)
+          }
+        }
+        setFlightsData(Array.from(uniqueFlights.values()))
+      }
+    } catch (err) {
+      console.error('Error fetching flights from API:', err)
+      setError(err instanceof Error ? err.message : 'Failed to fetch flight data from API')
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault()
-    const rect = e.currentTarget.getBoundingClientRect()
+    const container = chartContainerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
     const mouseX = e.clientX - rect.left
     const chartLeft = 60 // margin left
     const chartRight = rect.width - 20 // margin right
@@ -68,45 +174,61 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     // Calculate where the mouse is as a ratio within the chart area
     const mouseRatio = Math.max(0, Math.min(1, (mouseX - chartLeft) / chartWidth))
 
-    const [min, max] = xRange
-    const currentRange = max - min
-    const mouseValue = min + mouseRatio * currentRange
+    setXRange((prevRange) => {
+      const [min, max] = prevRange
+      const currentRange = max - min
+      const mouseValue = min + mouseRatio * currentRange
 
-    const zoomFactor = e.deltaY > 0 ? 1.2 : 0.8
-    const newRange = currentRange * zoomFactor
+      const zoomFactor = e.deltaY > 0 ? 1.2 : 0.8
+      const newRange = currentRange * zoomFactor
 
-    if (newRange >= 2 && newRange <= 24) {
-      // Keep the mouse position fixed while zooming
-      let newMin = mouseValue - mouseRatio * newRange
-      let newMax = mouseValue + (1 - mouseRatio) * newRange
+      if (newRange >= 2 && newRange <= 24) {
+        // Keep the mouse position fixed while zooming
+        let newMin = mouseValue - mouseRatio * newRange
+        let newMax = mouseValue + (1 - mouseRatio) * newRange
 
-      // Clamp to valid bounds
-      if (newMin < 0) {
-        newMin = 0
-        newMax = newRange
+        // Clamp to valid bounds
+        if (newMin < 0) {
+          newMin = 0
+          newMax = newRange
+        }
+        if (newMax > 24) {
+          newMax = 24
+          newMin = 24 - newRange
+        }
+
+        return [newMin, newMax]
       }
-      if (newMax > 24) {
-        newMax = 24
-        newMin = 24 - newRange
-      }
+      return prevRange
+    })
+  }, [])
 
-      setXRange([newMin, newMax])
+  // Attach wheel listener with passive: false to allow preventDefault
+  useEffect(() => {
+    const container = chartContainerRef.current
+    if (!container) return
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      container.removeEventListener('wheel', handleWheel)
     }
-  }
+  }, [handleWheel])
 
   useEffect(() => {
     async function fetchFlights() {
       if (!airportIata || airportIata.length !== 3 || !selectedDate) {
         setFlightsData([])
+        setError(null)
         return
       }
 
       setLoading(true)
+      setError(null)
       try {
         const startOfDay = selectedDate.utc().startOf('day').toISOString()
         const endOfDay = selectedDate.utc().endOf('day').toISOString()
 
-        const { data, error } = await supabase
+        const { data, error: fetchError } = await supabase
           .from('flights')
           .select('*')
           .eq('airport_iata', airportIata.toUpperCase())
@@ -114,8 +236,9 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
           .lte('scheduled_time_utc', endOfDay)
           .order('uploaded_at', { ascending: false })
 
-        if (error) {
-          console.error('Error fetching flights:', error)
+        if (fetchError) {
+          console.error('Error fetching flights:', fetchError)
+          setError(fetchError.message || 'Failed to fetch flights data')
           setFlightsData([])
         } else if (data) {
           // Deduplicate by flight_number + scheduled_time_utc, keeping only max uploaded_at
@@ -130,6 +253,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
         }
       } catch (err) {
         console.error('Error fetching flights:', err)
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred')
         setFlightsData([])
       } finally {
         setLoading(false)
@@ -238,9 +362,9 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     const airlines = new Set<string>()
 
     for (const flight of flightsData) {
-      const scheduledTime = dayjs(flight.scheduled_time_local)
+      const scheduledTime = dayjs(flight.scheduled_time_utc).utc()
       const hour = scheduledTime.hour() + scheduledTime.minute() / 60
-      const isCancelled = flight.flight_status?.toLowerCase() === 'cancelled'
+      const isCancelled = flight.flight_status?.toLowerCase() === 'canceled'
       const delay = isCancelled ? 300 : (flight.delay_minutes ?? 0)
 
       const airlineName = flight.airline_iata || flight.airline_name || 'Unknown'
@@ -308,9 +432,9 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
 
     // Get all data points sorted by time
     const points = flightsData.map((flight) => {
-      const scheduledTime = dayjs(flight.scheduled_time_local)
+      const scheduledTime = dayjs(flight.scheduled_time_utc).utc()
       const hour = scheduledTime.hour() + scheduledTime.minute() / 60
-      const isCancelled = flight.flight_status?.toLowerCase() === 'cancelled'
+      const isCancelled = flight.flight_status?.toLowerCase() === 'canceled'
       const delay = isCancelled ? 300 : (flight.delay_minutes ?? 0)
       return { x: hour, y: delay }
     }).sort((a, b) => a.x - b.x)
@@ -369,16 +493,71 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
           </LocalizationProvider>
         </Box>
         <Box sx={{ minWidth: 200 }}>
-          <TextField
-            label="IATA Code"
-            value={airportIata}
-            onChange={(e) => setAirportIata(e.target.value.toUpperCase())}
-            placeholder="e.g. JFK"
-            inputProps={{ maxLength: 3 }}
-            fullWidth
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <TextField
+              label="IATA Code"
+              value={airportIata}
+              onChange={(e) => setAirportIata(e.target.value.toUpperCase())}
+              placeholder="e.g. JFK"
+              inputProps={{ maxLength: 3 }}
+              fullWidth
+            />
+            <Tooltip title={fetchControlsUnlocked ? 'Lock fetch controls' : 'Unlock to fetch from API'}>
+              <IconButton
+                onClick={() => setFetchControlsUnlocked(!fetchControlsUnlocked)}
+                color={fetchControlsUnlocked ? 'primary' : 'default'}
+              >
+                {fetchControlsUnlocked ? <LockOpenIcon /> : <LockIcon />}
+              </IconButton>
+            </Tooltip>
+          </Box>
+          {fetchControlsUnlocked && airportIata.length === 3 && (
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap', mt: 2 }}>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel>From</InputLabel>
+                <Select
+                  value={hourFrom}
+                  label="From"
+                  onChange={(e) => handleHourFromChange(e.target.value as number)}
+                >
+                  {hourOptions.map((h) => (
+                    <MenuItem key={h} value={h}>{`${h.toString().padStart(2, '0')}:00`}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel>To</InputLabel>
+                <Select
+                  value={hourTo}
+                  label="To"
+                  onChange={(e) => handleHourToChange(e.target.value as number)}
+                >
+                  {hourOptions.map((h) => (
+                    <MenuItem key={h} value={h}>{`${h.toString().padStart(2, '0')}:00`}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Typography variant="body2" color="text.secondary">
+                (max 12h UTC)
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={fetchFlightsFromApi}
+                disabled={fetching}
+                size="small"
+              >
+                {fetching ? 'Fetching...' : 'Fetch Flight Data'}
+              </Button>
+            </Box>
+          )}
         </Box>
       </Box>
+
+      {error && (
+        <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -396,7 +575,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
                 Delay Distribution (Cancelled = 300 min) — Scroll to zoom, double-click to reset
               </Typography>
               <Box
-                onWheel={handleWheel}
+                ref={chartContainerRef}
                 onDoubleClick={() => setXRange([0, 24])}
                 sx={{ height: 300, cursor: 'ew-resize' }}
               >
@@ -409,10 +588,10 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
                   tickSize: 5,
                   tickPadding: 5,
                   tickRotation: 0,
-                  legend: 'Time (Hour)',
+                  legend: 'Time (Hour UTC)',
                   legendPosition: 'middle',
                   legendOffset: 40,
-                  tickValues: [0, 3, 6, 9, 12, 15, 18, 21, 24],
+                  tickValues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,12, 15, 18, 21, 24],
                   format: (value) => `${value}:00`,
                 }}
                 axisLeft={{
@@ -458,7 +637,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
                         Time: {Math.floor(node.data.x as number)}:{String(Math.round(((node.data.x as number) % 1) * 60)).padStart(2, '0')}
                       </Typography>
                       <Typography variant="body2">
-                        {data.status?.toLowerCase() === 'cancelled' ? 'Cancelled' : `Delay: ${node.data.y} min`}
+                        {data.status?.toLowerCase() === 'canceled' ? 'Cancelled' : `Delay: ${node.data.y} min`}
                       </Typography>
                     </Box>
                   )
@@ -481,7 +660,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
           </Box>
         ) : (
           <Typography color="text.secondary">
-            No flights found for {airportIata} on {selectedDate?.format('YYYY-MM-DD')}
+            No flights found for {airportIata} on {selectedDate?.format('YYYY-MM-DD')}. Click the lock icon to fetch from API.
           </Typography>
         )
       ) : (
