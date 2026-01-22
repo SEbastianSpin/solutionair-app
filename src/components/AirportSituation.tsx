@@ -92,6 +92,14 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     setChartContainer(node)
   }, [])
 
+  // Touch gesture state refs
+  const touchStateRef = useRef<{
+    initialTouches: { x: number; y: number }[]
+    initialXRange: [number, number]
+    initialPinchDistance: number
+    lastPanX: number
+  } | null>(null)
+
   const hourOptions = Array.from({ length: 24 }, (_, i) => i)
 
   const handleHourFromChange = (value: number) => {
@@ -222,15 +230,120 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     })
   }, [chartContainer])
 
-  // Attach wheel listener with passive: false to allow preventDefault
+  // Touch handlers for pinch-to-zoom and pan
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    if (!chartContainer) return
+    const touches = Array.from(e.touches).map((t) => ({ x: t.clientX, y: t.clientY }))
+
+    let initialPinchDistance = 0
+    if (touches.length === 2) {
+      initialPinchDistance = Math.hypot(
+        touches[1].x - touches[0].x,
+        touches[1].y - touches[0].y
+      )
+    }
+
+    touchStateRef.current = {
+      initialTouches: touches,
+      initialXRange: [...xRange] as [number, number],
+      initialPinchDistance,
+      lastPanX: touches[0]?.x || 0,
+    }
+  }, [chartContainer, xRange])
+
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (!chartContainer || !touchStateRef.current) return
+    e.preventDefault()
+
+    const rect = chartContainer.getBoundingClientRect()
+    const chartLeft = 60
+    const chartRight = rect.width - 20
+    const chartWidth = chartRight - chartLeft
+    const touches = Array.from(e.touches).map((t) => ({ x: t.clientX, y: t.clientY }))
+
+    if (touches.length === 2 && touchStateRef.current.initialTouches.length === 2) {
+      // Pinch to zoom
+      const currentDistance = Math.hypot(
+        touches[1].x - touches[0].x,
+        touches[1].y - touches[0].y
+      )
+      const initialDistance = touchStateRef.current.initialPinchDistance
+
+      if (initialDistance > 0) {
+        const scale = initialDistance / currentDistance
+        const [initialMin, initialMax] = touchStateRef.current.initialXRange
+        const initialRange = initialMax - initialMin
+        const newRange = Math.min(24, Math.max(2, initialRange * scale))
+
+        // Center of pinch in chart coordinates
+        const pinchCenterX = (touches[0].x + touches[1].x) / 2 - rect.left
+        const pinchRatio = Math.max(0, Math.min(1, (pinchCenterX - chartLeft) / chartWidth))
+        const centerValue = initialMin + pinchRatio * initialRange
+
+        let newMin = centerValue - pinchRatio * newRange
+        let newMax = centerValue + (1 - pinchRatio) * newRange
+
+        // Clamp to bounds
+        if (newMin < 0) {
+          newMin = 0
+          newMax = newRange
+        }
+        if (newMax > 24) {
+          newMax = 24
+          newMin = 24 - newRange
+        }
+
+        setXRange([newMin, newMax])
+      }
+    } else if (touches.length === 1) {
+      // Single finger pan
+      const deltaX = touches[0].x - touchStateRef.current.lastPanX
+      touchStateRef.current.lastPanX = touches[0].x
+
+      setXRange((prevRange) => {
+        const [min, max] = prevRange
+        const currentRange = max - min
+        const hoursPerPixel = currentRange / chartWidth
+        const deltaHours = -deltaX * hoursPerPixel
+
+        let newMin = min + deltaHours
+        let newMax = max + deltaHours
+
+        // Clamp to bounds
+        if (newMin < 0) {
+          newMin = 0
+          newMax = currentRange
+        }
+        if (newMax > 24) {
+          newMax = 24
+          newMin = 24 - currentRange
+        }
+
+        return [newMin, newMax]
+      })
+    }
+  }, [chartContainer])
+
+  const handleTouchEnd = useCallback(() => {
+    touchStateRef.current = null
+  }, [])
+
+  // Attach wheel and touch listeners
   useEffect(() => {
     if (!chartContainer) return
 
     chartContainer.addEventListener('wheel', handleWheel, { passive: false })
+    chartContainer.addEventListener('touchstart', handleTouchStart, { passive: true })
+    chartContainer.addEventListener('touchmove', handleTouchMove, { passive: false })
+    chartContainer.addEventListener('touchend', handleTouchEnd, { passive: true })
+
     return () => {
       chartContainer.removeEventListener('wheel', handleWheel)
+      chartContainer.removeEventListener('touchstart', handleTouchStart)
+      chartContainer.removeEventListener('touchmove', handleTouchMove)
+      chartContainer.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [chartContainer, handleWheel])
+  }, [chartContainer, handleWheel, handleTouchStart, handleTouchMove, handleTouchEnd])
 
   useEffect(() => {
     async function fetchFlights() {
@@ -592,12 +705,16 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
 
             <Box sx={{ height: 350, width: '100%', mb: 3 }}>
               <Typography variant="subtitle2" gutterBottom>
-                Delay Distribution (Cancelled = 300 min) — Scroll to zoom, double-click to reset
+                Delay Distribution (Cancelled = 300 min) — Pinch/scroll to zoom, drag to pan, double-tap to reset
               </Typography>
               <Box
                 ref={chartContainerRef}
                 onDoubleClick={() => setXRange([0, 24])}
-                sx={{ height: 300, cursor: 'ew-resize' }}
+                sx={{
+                  height: 300,
+                  cursor: 'ew-resize',
+                  touchAction: 'none',
+                }}
               >
               <ResponsiveScatterPlot
                 data={chartData}
