@@ -20,6 +20,7 @@
     "@nivo/funnel": "^0.99.0",
     "@nivo/line": "^0.99.0",
     "@nivo/pie": "^0.99.0",
+    "@nivo/scatterplot": "^0.99.0",
     "@supabase/supabase-js": "^2.90.1",
     "ag-grid-community": "^35.0.0",
     "ag-grid-react": "^35.0.0",

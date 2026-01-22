@@ -39,9 +39,20 @@ interface WeatherData {
   chance_of_snow: string | null
 }
 
-export default function Weather() {
-  const [weatherDate, setWeatherDate] = useState<Dayjs | null>(dayjs())
-  const [weatherIata, setWeatherIata] = useState('')
+interface WeatherProps {
+  iata?: string
+  date?: string // YYYY-MM-DD format
+}
+
+export default function Weather({ iata, date }: WeatherProps) {
+  const [weatherDate, setWeatherDate] = useState<Dayjs | null>(() => {
+    if (date) {
+      const parsed = dayjs(date)
+      return parsed.isValid() ? parsed : dayjs()
+    }
+    return dayjs()
+  })
+  const [weatherIata, setWeatherIata] = useState(iata?.toUpperCase() || '')
   const [weatherData, setWeatherData] = useState<WeatherData[]>([])
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [fetchingFromApi, setFetchingFromApi] = useState(false)
@@ -269,6 +280,7 @@ export default function Weather() {
               value={weatherDate}
               onChange={(newValue) => setWeatherDate(newValue)}
               maxDate={dayjs()}
+              minDate={dayjs().subtract(3, 'days')}
             />
           </LocalizationProvider>
         </Box>
@@ -330,7 +342,7 @@ export default function Weather() {
                 rowHeight={40}
               />
             </Box>
-            {weatherData.length < 24 && (
+            {weatherData.length < 23 && (
               <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Typography color="text.secondary">
                   Incomplete data ({weatherData.length}/24 hours)
