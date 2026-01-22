@@ -63,6 +63,22 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     return dayjs()
   })
   const [airportIata, setAirportIata] = useState(iata?.toUpperCase() || '')
+
+  // Update state when props change
+  useEffect(() => {
+    if (iata) {
+      setAirportIata(iata.toUpperCase())
+    }
+  }, [iata])
+
+  useEffect(() => {
+    if (date) {
+      const parsed = dayjs(date)
+      if (parsed.isValid()) {
+        setSelectedDate(parsed)
+      }
+    }
+  }, [date])
   const [flightsData, setFlightsData] = useState<FlightData[]>([])
   const [loading, setLoading] = useState(false)
   const [xRange, setXRange] = useState<[number, number]>([0, 24])
@@ -71,7 +87,10 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
   const [fetching, setFetching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fetchControlsUnlocked, setFetchControlsUnlocked] = useState(false)
-  const chartContainerRef = useRef<HTMLDivElement>(null)
+  const [chartContainer, setChartContainer] = useState<HTMLDivElement | null>(null)
+  const chartContainerRef = useCallback((node: HTMLDivElement | null) => {
+    setChartContainer(node)
+  }, [])
 
   const hourOptions = Array.from({ length: 24 }, (_, i) => i)
 
@@ -132,8 +151,8 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
       }
 
       // Re-fetch data from database after API call
-      const startOfDay = selectedDate.utc().startOf('day').toISOString()
-      const endOfDay = selectedDate.utc().endOf('day').toISOString()
+      const startOfDay = `${dateStr}T00:00:00Z`
+      const endOfDay = `${dateStr}T23:59:59Z`
 
       const { data, error } = await supabase
         .from('flights')
@@ -163,9 +182,9 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
 
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault()
-    const container = chartContainerRef.current
-    if (!container) return
-    const rect = container.getBoundingClientRect()
+    e.stopPropagation()
+    if (!chartContainer) return
+    const rect = chartContainer.getBoundingClientRect()
     const mouseX = e.clientX - rect.left
     const chartLeft = 60 // margin left
     const chartRight = rect.width - 20 // margin right
@@ -201,18 +220,17 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
       }
       return prevRange
     })
-  }, [])
+  }, [chartContainer])
 
   // Attach wheel listener with passive: false to allow preventDefault
   useEffect(() => {
-    const container = chartContainerRef.current
-    if (!container) return
+    if (!chartContainer) return
 
-    container.addEventListener('wheel', handleWheel, { passive: false })
+    chartContainer.addEventListener('wheel', handleWheel, { passive: false })
     return () => {
-      container.removeEventListener('wheel', handleWheel)
+      chartContainer.removeEventListener('wheel', handleWheel)
     }
-  }, [handleWheel])
+  }, [chartContainer, handleWheel])
 
   useEffect(() => {
     async function fetchFlights() {
@@ -225,8 +243,10 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
       setLoading(true)
       setError(null)
       try {
-        const startOfDay = selectedDate.utc().startOf('day').toISOString()
-        const endOfDay = selectedDate.utc().endOf('day').toISOString()
+        // Use the date string directly to avoid timezone issues
+        const dateStr = selectedDate.format('YYYY-MM-DD')
+        const startOfDay = `${dateStr}T00:00:00Z`
+        const endOfDay = `${dateStr}T23:59:59Z`
 
         const { data, error: fetchError } = await supabase
           .from('flights')

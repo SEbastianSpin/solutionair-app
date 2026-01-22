@@ -48,6 +48,22 @@ export default function Notams({ icao, date }: NotamsProps) {
     return dayjs()
   })
   const [locationIcao, setLocationIcao] = useState(icao?.toUpperCase() || '')
+
+  // Update state when props change
+  useEffect(() => {
+    if (icao) {
+      setLocationIcao(icao.toUpperCase())
+    }
+  }, [icao])
+
+  useEffect(() => {
+    if (date) {
+      const parsed = dayjs(date)
+      if (parsed.isValid()) {
+        setSelectedDate(parsed)
+      }
+    }
+  }, [date])
   const [notamsData, setNotamsData] = useState<NotamData[]>([])
   const [loading, setLoading] = useState(false)
 

@@ -53,6 +53,22 @@ export default function Weather({ iata, date }: WeatherProps) {
     return dayjs()
   })
   const [weatherIata, setWeatherIata] = useState(iata?.toUpperCase() || '')
+
+  // Update state when props change
+  useEffect(() => {
+    if (iata) {
+      setWeatherIata(iata.toUpperCase())
+    }
+  }, [iata])
+
+  useEffect(() => {
+    if (date) {
+      const parsed = dayjs(date)
+      if (parsed.isValid()) {
+        setWeatherDate(parsed)
+      }
+    }
+  }, [date])
   const [weatherData, setWeatherData] = useState<WeatherData[]>([])
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [fetchingFromApi, setFetchingFromApi] = useState(false)
@@ -67,16 +83,12 @@ export default function Weather({ iata, date }: WeatherProps) {
       setWeatherLoading(true)
       try {
         const dateStr = weatherDate.format('YYYY-MM-DD')
-        const startOfDay = weatherDate.utc().startOf('day').toISOString()
-        const endOfDay = weatherDate.utc().endOf('day').toISOString()
 
         const { data, error } = await supabase
           .from('weather')
           .select('*')
           .eq('airport_iata', weatherIata.toUpperCase())
           .eq('forecast_date', dateStr)
-          .gte('time_epoch', startOfDay)
-          .lte('time_epoch', endOfDay)
           .order('time_epoch', { ascending: true })
 
         if (error) {
@@ -121,16 +133,11 @@ export default function Weather({ iata, date }: WeatherProps) {
     if (error) throw error;
 
       // Re-fetch data from database to get the newly inserted records
-      const startOfDay = weatherDate.utc().startOf('day').toISOString()
-      const endOfDay = weatherDate.utc().endOf('day').toISOString()
-
       const { data, error: fetchError } = await supabase
         .from('weather')
         .select('*')
         .eq('airport_iata', weatherIata.toUpperCase())
         .eq('forecast_date', dateStr)
-        .gte('time_epoch', startOfDay)
-        .lte('time_epoch', endOfDay)
         .order('time_epoch', { ascending: true })
 
       if (!fetchError && data) {
