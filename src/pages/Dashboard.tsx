@@ -134,6 +134,8 @@ export default function Dashboard() {
           p: { xs: 2, md: 3 },
           backgroundColor: '#f5f5f5',
           minHeight: 'calc(100vh - 64px)',
+          maxHeight: 'calc(100vh - 64px)',
+          overflow: 'auto',
           width: '100%',
           transition: theme.transitions.create('margin', {
             easing: theme.transitions.easing.sharp,

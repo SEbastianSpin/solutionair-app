@@ -189,6 +189,8 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
   }
 
   const handleWheel = useCallback((e: WheelEvent) => {
+    // Only zoom if Ctrl/Cmd is held, otherwise allow normal scrolling
+    if (!e.ctrlKey && !e.metaKey) return
     e.preventDefault()
     e.stopPropagation()
     if (!chartContainer) return
@@ -253,13 +255,24 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!chartContainer || !touchStateRef.current) return
-    e.preventDefault()
 
     const rect = chartContainer.getBoundingClientRect()
     const chartLeft = 60
     const chartRight = rect.width - 20
     const chartWidth = chartRight - chartLeft
     const touches = Array.from(e.touches).map((t) => ({ x: t.clientX, y: t.clientY }))
+
+    // For 2-finger gestures, check if it's a horizontal pinch (zoom) or vertical scroll
+    if (touches.length === 2) {
+      const deltaY = Math.abs(touches[0].y - touchStateRef.current.initialTouches[0]?.y || 0)
+      const deltaX = Math.abs(touches[0].x - touchStateRef.current.initialTouches[0]?.x || 0)
+      // If moving more vertically than horizontally, allow default scroll
+      if (deltaY > deltaX && deltaY > 10) {
+        return
+      }
+    }
+
+    e.preventDefault()
 
     if (touches.length === 2 && touchStateRef.current.initialTouches.length === 2) {
       // Pinch to zoom
@@ -706,7 +719,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
 
             <Box sx={{ height: 350, width: '100%', mb: 3 }}>
               <Typography variant="subtitle2" gutterBottom>
-                Delay Distribution (Cancelled = 300 min) — Pinch/scroll to zoom, drag to pan, double-tap to reset
+                Delay Distribution (Cancelled = 300 min) — Ctrl+scroll to zoom, drag to pan, double-click to reset
               </Typography>
               <Box
                 ref={chartContainerRef}
@@ -714,7 +727,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
                 sx={{
                   height: 300,
                   cursor: 'ew-resize',
-                  touchAction: 'none',
+                  touchAction: 'pan-y',
                 }}
               >
               <ResponsiveScatterPlot
