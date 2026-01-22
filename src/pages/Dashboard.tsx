@@ -24,7 +24,9 @@ import CloudIcon from '@mui/icons-material/Cloud'
 import FlightLandIcon from '@mui/icons-material/FlightLand'
 import AnnouncementIcon from '@mui/icons-material/Announcement'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
+import FlightIcon from '@mui/icons-material/Flight'
 import FlightsFunnel from '../components/FlightsFunnel'
+import UnprocessedFlights from '../components/UnprocessedFlights'
 import CauseCodeMetrics from '../components/CauseCodeMetrics'
 import Weather from '../components/Weather'
 import AirportSituation from '../components/AirportSituation'
@@ -35,6 +37,7 @@ const drawerWidth = 240
 
 const menuItems = [
   { id: 'overview', label: 'Overview', icon: <HomeIcon /> },
+  { id: 'unprocessed-flights', label: 'Unprocessed Flights', icon: <FlightIcon /> },
   { id: 'metrics', label: 'Cause Code Metrics', icon: <AssessmentIcon /> },
   { id: 'airport-situation', label: 'Airport Situation', icon: <FlightLandIcon /> },
   { id: 'weather', label: 'Weather', icon: <CloudIcon /> },
@@ -173,6 +176,12 @@ export default function Dashboard() {
               <Typography variant="h4">--</Typography>
             </Paper>
           </Box>
+        )}
+
+        {activeSection === 'unprocessed-flights' && (
+          <Paper sx={{ p: { xs: 2, md: 3 } }}>
+            <UnprocessedFlights />
+          </Paper>
         )}
 
         {activeSection === 'metrics' && (
