@@ -21,6 +21,8 @@ import utc from 'dayjs/plugin/utc'
 import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, AllCommunityModule, themeQuartz } from 'ag-grid-community'
 import type { ColDef, ValueFormatterParams, RowClassParams, CellValueChangedEvent, SelectionChangedEvent, RowClickedEvent } from 'ag-grid-community'
+import { ResponsiveLine } from '@nivo/line'
+import type { SliceTooltipProps } from '@nivo/line'
 import { supabase } from '../lib/supabase'
 
 dayjs.extend(utc)
@@ -277,13 +279,23 @@ function calculatePassengerGridData(flights: CampaignFlight[]): PassengerGridRow
 
       if (fd.isArrival) {
         const tLand = fd.tActual
-        const tEnd = tLand + NINETY_MINS
-        passengers = arrivalsExitLogNormal(t, fd.N, tLand, tEnd)
+        if (t < tLand) {
+          // Before landing, no passengers yet
+          passengers = 0
+        } else {
+          const tEnd = tLand + NINETY_MINS
+          passengers = arrivalsExitLogNormal(t, fd.N, tLand, tEnd)
+        }
       } else {
         const tDep = fd.tActual
-        const rawStart = tDep - THREE_HOURS
-        const tOpen = rawStart - (rawStart % 3600)
-        passengers = passengersLogNormal(t, fd.N, tOpen, tDep)
+        if (t > tDep) {
+          // After departure, all passengers have left the airport
+          passengers = 0
+        } else {
+          const rawStart = tDep - THREE_HOURS
+          const tOpen = rawStart - (rawStart % 3600)
+          passengers = passengersLogNormal(t, fd.N, tOpen, tDep)
+        }
       }
 
       const roundedPassengers = Math.round(passengers)
@@ -296,6 +308,38 @@ function calculatePassengerGridData(flights: CampaignFlight[]): PassengerGridRow
   }
 
   return results
+}
+
+interface NivoDataPoint {
+  x: string
+  y: number
+}
+
+interface NivoSerie {
+  id: string
+  data: NivoDataPoint[]
+}
+
+function transformToNivoData(gridData: PassengerGridRow[], flights: CampaignFlight[]): NivoSerie[] {
+  if (gridData.length === 0 || flights.length === 0) return []
+
+  const series: NivoSerie[] = []
+
+  // Create a series for each flight
+  flights.forEach((flight, index) => {
+    const columnKey = `flight_${index}`
+    const flightData: NivoDataPoint[] = gridData.map(row => ({
+      x: row.time_formatted as string,
+      y: (row[columnKey] as number) || 0
+    }))
+
+    series.push({
+      id: flight.flight_number,
+      data: flightData
+    })
+  })
+
+  return series
 }
 
 const STATUS_OPTIONS: { value: CampaignStatus; label: string }[] = [
@@ -737,6 +781,50 @@ export default function Campaigns() {
     return cols
   }, [selectedFlights])
 
+  // Transform passenger grid data to Nivo format for area chart
+  const chartData = useMemo(() => {
+    return transformToNivoData(passengerGridData, selectedFlights)
+  }, [passengerGridData, selectedFlights])
+
+  // Calculate ad window markers for the chart
+  const adWindowMarkers = useMemo(() => {
+    if (!selectedCampaign?.ad_window_start || !selectedCampaign?.ad_window_end) return []
+
+    const adStart = dayjs(selectedCampaign.ad_window_start).utc().format('HH:mm')
+    const adEnd = dayjs(selectedCampaign.ad_window_end).utc().format('HH:mm')
+
+    // Check if these times exist in our data
+    const timePoints = passengerGridData.map(r => r.time_formatted)
+    const hasStart = timePoints.includes(adStart)
+    const hasEnd = timePoints.includes(adEnd)
+
+    const markers = []
+
+    if (hasStart) {
+      markers.push({
+        axis: 'x' as const,
+        value: adStart,
+        lineStyle: { stroke: '#4caf50', strokeWidth: 2, strokeDasharray: '6 4' },
+        legend: 'Ad Start',
+        legendOrientation: 'vertical' as const,
+        legendPosition: 'top' as const,
+      })
+    }
+
+    if (hasEnd) {
+      markers.push({
+        axis: 'x' as const,
+        value: adEnd,
+        lineStyle: { stroke: '#f44336', strokeWidth: 2, strokeDasharray: '6 4' },
+        legend: 'Ad End',
+        legendOrientation: 'vertical' as const,
+        legendPosition: 'top' as const,
+      })
+    }
+
+    return markers
+  }, [selectedCampaign, passengerGridData])
+
   const flightColumnDefs: ColDef<CampaignFlight>[] = useMemo(() => [
     {
       headerCheckboxSelection: true,
@@ -1101,6 +1189,104 @@ export default function Campaigns() {
                 Time points: {passengerGridData.length} |
                 Peak: {passengerGridData.length > 0 ? Math.max(...passengerGridData.map(r => r.total as number)) : 0}
               </Typography>
+
+              {/* Passenger Distribution Area Chart */}
+              {chartData.length > 0 && (
+                <Box sx={{ height: 350, width: '100%', mb: 2 }}>
+                  <ResponsiveLine
+                    data={chartData}
+                    margin={{ top: 20, right: 120, bottom: 60, left: 60 }}
+                    xScale={{ type: 'point' }}
+                    yScale={{
+                      type: 'linear',
+                      min: 0,
+                      max: 'auto',
+                      stacked: true,
+                    }}
+                    curve="monotoneX"
+                    enableArea={true}
+                    areaOpacity={0.6}
+                    axisTop={null}
+                    axisRight={null}
+                    axisBottom={{
+                      tickSize: 5,
+                      tickPadding: 5,
+                      tickRotation: -45,
+                      legend: 'Time (UTC)',
+                      legendOffset: 50,
+                      legendPosition: 'middle',
+                      tickValues: passengerGridData
+                        .filter((_, i) => i % Math.ceil(passengerGridData.length / 12) === 0)
+                        .map(r => r.time_formatted),
+                    }}
+                    axisLeft={{
+                      tickSize: 5,
+                      tickPadding: 5,
+                      tickRotation: 0,
+                      legend: 'Passengers',
+                      legendOffset: -50,
+                      legendPosition: 'middle',
+                    }}
+                    colors={{ scheme: 'category10' }}
+                    pointSize={4}
+                    pointColor={{ theme: 'background' }}
+                    pointBorderWidth={2}
+                    pointBorderColor={{ from: 'serieColor' }}
+                    enablePointLabel={false}
+                    useMesh={true}
+                    enableSlices="x"
+                    sliceTooltip={({ slice }: SliceTooltipProps) => (
+                      <Box
+                        sx={{
+                          background: 'white',
+                          padding: '9px 12px',
+                          border: '1px solid #ccc',
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="caption" fontWeight="bold">
+                          {slice.points[0]?.data.xFormatted}
+                        </Typography>
+                        {slice.points.map((point) => (
+                          <Box key={point.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box
+                              sx={{
+                                width: 12,
+                                height: 12,
+                                backgroundColor: point.serieColor,
+                                borderRadius: '50%',
+                              }}
+                            />
+                            <Typography variant="caption">
+                              {point.serieId}: {point.data.yFormatted} pax
+                            </Typography>
+                          </Box>
+                        ))}
+                        <Typography variant="caption" fontWeight="bold" sx={{ mt: 0.5, display: 'block' }}>
+                          Total: {slice.points.reduce((sum, p) => sum + (Number(p.data.y) || 0), 0)} pax
+                        </Typography>
+                      </Box>
+                    )}
+                    legends={[
+                      {
+                        anchor: 'bottom-right',
+                        direction: 'column',
+                        justify: false,
+                        translateX: 110,
+                        translateY: 0,
+                        itemsSpacing: 2,
+                        itemDirection: 'left-to-right',
+                        itemWidth: 100,
+                        itemHeight: 20,
+                        itemOpacity: 0.85,
+                        symbolSize: 12,
+                        symbolShape: 'circle',
+                      }
+                    ]}
+                    markers={adWindowMarkers}
+                  />
+                </Box>
+              )}
 
               {showPassengerGrid && passengerGridData.length > 0 && (
                 <Box sx={{ height: 400, width: '100%' }}>
