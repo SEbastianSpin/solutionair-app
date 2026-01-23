@@ -20,9 +20,9 @@ import dayjs, { Dayjs } from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, AllCommunityModule, themeQuartz } from 'ag-grid-community'
-import type { ColDef, ValueFormatterParams, RowClassParams, CellValueChangedEvent, SelectionChangedEvent, RowClickedEvent } from 'ag-grid-community'
+import type { ColDef, ValueFormatterParams, RowClassParams, CellValueChangedEvent, SelectionChangedEvent, CellClickedEvent } from 'ag-grid-community'
 import { ResponsiveLine } from '@nivo/line'
-import type { SliceTooltipProps } from '@nivo/line'
+import type { SliceTooltipProps, DefaultSeries, Point } from '@nivo/line'
 import { supabase } from '../lib/supabase'
 
 dayjs.extend(utc)
@@ -60,14 +60,6 @@ interface CampaignFlight {
   avg_pax_est: number | null
   country_code: string | null
   country_code_target: string | null
-}
-
-interface PassengerTimePoint {
-  flight_id: string
-  flight_type: string
-  time: number
-  time_formatted: string
-  passenger_count: number
 }
 
 interface PassengerGridRow {
@@ -148,71 +140,6 @@ function passengersLogNormal(
   const maxProb = lognormCDF(1.0, sigma, scale)
 
   return N * (cumProb / maxProb)
-}
-
-function calculatePassengerDistribution(flight: CampaignFlight): PassengerTimePoint[] {
-  const results: PassengerTimePoint[] = []
-
-  // Use actual_time_utc or fallback to scheduled_time_utc
-  const timeStr = flight.actual_time_utc || flight.scheduled_time_utc
-  if (!timeStr) return results
-
-  const tActual = dayjs(timeStr).unix()
-  const N = flight.avg_pax_est || 100
-  // Normalize flight_type to handle different cases
-  const fType = flight.flight_type?.toLowerCase()
-
-  const SECONDS_IN_HOUR = 3600
-  const THREE_HOURS_IN_SECONDS = 3 * SECONDS_IN_HOUR
-  const NINETY_MINS_IN_SECONDS = 90 * 60
-  const FIVE_MINUTES_IN_SECONDS = 300
-
-  if (fType === 'arrival' || fType === 'arr') {
-    const tLand = tActual
-    const tStartSnapped = Math.ceil(tLand / FIVE_MINUTES_IN_SECONDS) * FIVE_MINUTES_IN_SECONDS
-    const tEnd = tLand + NINETY_MINS_IN_SECONDS
-
-    for (let t = tStartSnapped; t <= tEnd; t += FIVE_MINUTES_IN_SECONDS) {
-      const currentRemaining = arrivalsExitLogNormal(t, N, tLand, tEnd)
-      results.push({
-        flight_id: flight.flight_number,
-        flight_type: flight.flight_type,
-        time: t,
-        time_formatted: dayjs.unix(t).utc().format('HH:mm'),
-        passenger_count: Math.round(currentRemaining)
-      })
-    }
-  } else if (fType === 'departure' || fType === 'dep') {
-    const tDep = tActual
-    const rawStart = tDep - THREE_HOURS_IN_SECONDS
-    const tOpenSnapped = rawStart - (rawStart % SECONDS_IN_HOUR)
-
-    // Generate time points from gate open to departure
-    for (let t = tOpenSnapped; t <= tDep; t += FIVE_MINUTES_IN_SECONDS) {
-      const passengerCount = passengersLogNormal(t, N, tOpenSnapped, tDep)
-      results.push({
-        flight_id: flight.flight_number,
-        flight_type: flight.flight_type,
-        time: t,
-        time_formatted: dayjs.unix(t).utc().format('HH:mm'),
-        passenger_count: Math.round(passengerCount)
-      })
-    }
-
-    // Always add the final departure time point with N passengers if not already included
-    const lastTime = results.length > 0 ? results[results.length - 1].time : 0
-    if (lastTime < tDep) {
-      results.push({
-        flight_id: flight.flight_number,
-        flight_type: flight.flight_type,
-        time: tDep,
-        time_formatted: dayjs.unix(tDep).utc().format('HH:mm'),
-        passenger_count: Math.round(N)
-      })
-    }
-  }
-
-  return results
 }
 
 function calculatePassengerGridData(flights: CampaignFlight[]): PassengerGridRow[] {
@@ -559,13 +486,13 @@ export default function Campaigns() {
     }
   }, [])
 
-  const onRowClicked = useCallback((event: RowClickedEvent<Campaign>) => {
+  const onCellClicked = useCallback((event: CellClickedEvent<Campaign>) => {
     const campaign = event.data
     if (!campaign) return
 
-    // Don't trigger if clicking on checkbox or editable cells
-    const column = event.column?.getColId()
-    if (column === '0' || column === 'campaign_status' || column === 'campaign_status_comments') {
+    // Don't trigger if clicking on checkbox (no field) or editable cells
+    const column = event.colDef?.field
+    if (!column || column === 'campaign_status' || column === 'campaign_status_comments') {
       return
     }
 
@@ -893,7 +820,7 @@ export default function Campaigns() {
       filter: 'agNumberColumnFilter',
       sortable: true,
       width: 100,
-      valueFormatter: (params: ValueFormatterParams) => params.value !== null ? Math.round(params.value) : '--',
+      valueFormatter: (params: ValueFormatterParams) => params.value !== null ? String(Math.round(params.value)) : '--',
     },
     {
       field: 'country_code',
@@ -1102,7 +1029,7 @@ export default function Campaigns() {
             rowSelection="multiple"
             onSelectionChanged={onSelectionChanged}
             onCellValueChanged={onCellValueChanged}
-            onRowClicked={onRowClicked}
+            onCellClicked={onCellClicked}
           />
         </Box>
       ) : (
@@ -1259,7 +1186,7 @@ export default function Campaigns() {
                     enablePointLabel={false}
                     useMesh={true}
                     enableSlices="x"
-                    sliceTooltip={({ slice }: SliceTooltipProps) => (
+                    sliceTooltip={({ slice }: SliceTooltipProps<DefaultSeries>) => (
                       <Box
                         sx={{
                           background: 'white',
@@ -1271,23 +1198,23 @@ export default function Campaigns() {
                         <Typography variant="caption" fontWeight="bold">
                           {slice.points[0]?.data.xFormatted}
                         </Typography>
-                        {slice.points.map((point) => (
+                        {slice.points.map((point: Point<DefaultSeries>) => (
                           <Box key={point.id} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Box
                               sx={{
                                 width: 12,
                                 height: 12,
-                                backgroundColor: point.serieColor,
+                                backgroundColor: point.seriesColor,
                                 borderRadius: '50%',
                               }}
                             />
                             <Typography variant="caption">
-                              {point.serieId}: {point.data.yFormatted} pax
+                              {point.seriesId}: {point.data.yFormatted} pax
                             </Typography>
                           </Box>
                         ))}
                         <Typography variant="caption" fontWeight="bold" sx={{ mt: 0.5, display: 'block' }}>
-                          Total: {slice.points.reduce((sum, p) => sum + (Number(p.data.y) || 0), 0)} pax
+                          Total: {slice.points.reduce((sum: number, p: Point<DefaultSeries>) => sum + (Number(p.data.y) || 0), 0)} pax
                         </Typography>
                       </Box>
                     )}
