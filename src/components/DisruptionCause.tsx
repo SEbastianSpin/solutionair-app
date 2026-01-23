@@ -774,11 +774,13 @@ export default function DisruptionCause() {
               </Button>
             )}
           </Box>
-          {selectedFlight && (
-            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', userSelect: 'all', fontFamily: 'monospace' }}>
-              {selectedFlight.d_airport_icao || '--'}, {selectedFlight.a_airport_icao || '--'}, {selectedFlight.airline_icao || '--'}
-            </Typography>
-          )}
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', userSelect: 'all', fontFamily: 'monospace' }}>
+            {[...new Set(
+              flightsData
+                .flatMap(f => [f.d_airport_icao, f.a_airport_icao])
+                .filter((icao): icao is string => !!icao)
+            )].sort().join(', ') || '--'}
+          </Typography>
           <Box sx={{
             height: 500,
             width: '100%',
