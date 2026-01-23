@@ -937,6 +937,22 @@ export default function Campaigns() {
     return ''
   }
 
+  const getFlightRowClass = useCallback((params: RowClassParams<CampaignFlight>): string => {
+    const data = params.data
+    if (!data || !selectedCampaign?.ad_demographic) return ''
+
+    const demographic = selectedCampaign.ad_demographic.toUpperCase()
+    const countryCode = data.country_code?.toUpperCase()
+    const countryCodeTarget = data.country_code_target?.toUpperCase()
+
+    // Highlight if either origin or target country matches the ad demographic
+    if (countryCode === demographic || countryCodeTarget === demographic) {
+      return 'row-demographic-match'
+    }
+
+    return ''
+  }, [selectedCampaign])
+
   return (
     <Box>
       <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mb: 3 }}>
@@ -1125,8 +1141,15 @@ export default function Campaigns() {
             <>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Select flights to see combined passenger distribution over time
+                {selectedCampaign.ad_demographic && ` (highlighted: ${selectedCampaign.ad_demographic} flights)`}
               </Typography>
-              <Box sx={{ height: 300, width: '100%' }}>
+              <Box sx={{
+                height: 300,
+                width: '100%',
+                '& .row-demographic-match': {
+                  backgroundColor: '#e3f2fd !important',
+                },
+              }}>
                 <AgGridReact<CampaignFlight>
                   rowData={campaignFlights}
                   columnDefs={flightColumnDefs}
@@ -1137,6 +1160,7 @@ export default function Campaigns() {
                   rowHeight={40}
                   rowSelection="multiple"
                   onSelectionChanged={onFlightSelectionChanged}
+                  getRowClass={getFlightRowClass}
                 />
               </Box>
             </>
