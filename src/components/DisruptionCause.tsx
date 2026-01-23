@@ -629,6 +629,11 @@ export default function DisruptionCause() {
               </Button>
             )}
           </Box>
+          {selectedFlight && (
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', userSelect: 'all', fontFamily: 'monospace' }}>
+              {selectedFlight.d_airport_icao || '--'}, {selectedFlight.a_airport_icao || '--'}, {selectedFlight.airline_icao || '--'}
+            </Typography>
+          )}
           <Box sx={{
             height: 500,
             width: '100%',
@@ -681,7 +686,7 @@ export default function DisruptionCause() {
                   Status: {selectedFlight.flight_status || 'N/A'}
                 </Typography>
 
-                <Tabs value={detailTab} onChange={(_, v) => setDetailTab(v)} sx={{ mb: 2 }}>
+                <Tabs value={detailTab} onChange={(_, v) => setDetailTab(v)} sx={{ mb: 2 }} variant="scrollable" scrollButtons="auto">
                   <Tab label="Previous Flight" />
                   <Tab label="Weather" />
                   <Tab label={`Airport Situation (${selectedFlight.d_airport_iata})`} />
