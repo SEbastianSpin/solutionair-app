@@ -18,6 +18,7 @@ import {
 } from '@mui/material'
 import SaveIcon from '@mui/icons-material/Save'
 import CloseIcon from '@mui/icons-material/Close'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
@@ -97,6 +98,17 @@ interface PreviousFlight {
   delay_minutes: number | null
 }
 
+interface DisruptionFeed {
+  id: number
+  title: string
+  description: string | null
+  key_detail: string | null
+  publish_date: string | null
+  item_url: string | null
+  countries: string | null
+  language: string | null
+}
+
 export default function DisruptionCause() {
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(dayjs())
   const [causeCode, setCauseCode] = useState<string>('')
@@ -115,6 +127,8 @@ export default function DisruptionCause() {
     message: '',
     severity: 'success',
   })
+  const [disruptionFeeds, setDisruptionFeeds] = useState<DisruptionFeed[]>([])
+  const [feedsLoading, setFeedsLoading] = useState(false)
 
   // Fetch available cause codes on mount
   useEffect(() => {
@@ -182,6 +196,42 @@ export default function DisruptionCause() {
 
     fetchDisruptedFlights()
   }, [selectedDate, causeCode])
+
+  // Fetch disruption feeds for selected date
+  useEffect(() => {
+    async function fetchDisruptionFeeds() {
+      if (!selectedDate) {
+        setDisruptionFeeds([])
+        return
+      }
+
+      setFeedsLoading(true)
+      try {
+        const dateStr = selectedDate.format('YYYY-MM-DD')
+
+        const { data, error } = await supabase
+          .from('disruption_feeds')
+          .select('id, title, description, key_detail, publish_date, item_url, countries, language')
+          .gte('publish_date', `${dateStr}T00:00:00`)
+          .lt('publish_date', `${dateStr}T23:59:59`)
+          .order('publish_date', { ascending: false })
+
+        if (error) {
+          console.error('Error fetching disruption feeds:', error)
+          setDisruptionFeeds([])
+        } else {
+          setDisruptionFeeds(data || [])
+        }
+      } catch (err) {
+        console.error('Error fetching disruption feeds:', err)
+        setDisruptionFeeds([])
+      } finally {
+        setFeedsLoading(false)
+      }
+    }
+
+    fetchDisruptionFeeds()
+  }, [selectedDate])
 
   // Fetch previous flight when a flight is selected
   useEffect(() => {
@@ -444,6 +494,75 @@ export default function DisruptionCause() {
     resizable: true,
   }), [])
 
+  const feedsColumnDefs: ColDef<DisruptionFeed>[] = useMemo(() => [
+    {
+      field: 'item_url',
+      headerName: '',
+      width: 50,
+      cellRenderer: (params: { value: string | null }) => {
+        if (!params.value) return null
+        return (
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation()
+              window.open(params.value!, '_blank', 'noopener,noreferrer')
+            }}
+            sx={{ p: 0.5 }}
+          >
+            <OpenInNewIcon fontSize="small" />
+          </IconButton>
+        )
+      },
+      sortable: false,
+      filter: false,
+    },
+    {
+      field: 'title',
+      headerName: 'Title',
+      filter: true,
+      sortable: true,
+      flex: 1,
+      minWidth: 200,
+      wrapText: true,
+      autoHeight: true,
+    },
+    {
+      field: 'description',
+      headerName: 'Description',
+      filter: true,
+      sortable: true,
+      flex: 2,
+      minWidth: 300,
+      wrapText: true,
+      autoHeight: true,
+    },
+    {
+      field: 'key_detail',
+      headerName: 'Key Detail',
+      filter: true,
+      sortable: true,
+      flex: 1,
+      minWidth: 200,
+      wrapText: true,
+      autoHeight: true,
+    },
+    {
+      field: 'countries',
+      headerName: 'Countries',
+      filter: true,
+      sortable: true,
+      width: 120,
+    },
+    {
+      field: 'language',
+      headerName: 'Lang',
+      filter: true,
+      sortable: true,
+      width: 80,
+    },
+  ], [])
+
   const handleRowClicked = (event: RowClickedEvent<DisruptedFlight>) => {
     if (event.data) {
       setSelectedFlight(event.data)
@@ -691,6 +810,7 @@ export default function DisruptionCause() {
                   <Tab label="Weather" />
                   <Tab label={`Airport Situation (${selectedFlight.d_airport_iata})`} />
                   <Tab label="NOTAMs" />
+                  <Tab label={`News Feeds (${disruptionFeeds.length})`} />
                 </Tabs>
 
                 {detailTab === 0 && (
@@ -836,6 +956,30 @@ export default function DisruptionCause() {
                     {!selectedFlight.d_airport_icao && !selectedFlight.a_airport_icao && (
                       <Typography color="text.secondary">
                         No ICAO codes available for this flight
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+
+                {detailTab === 4 && (
+                  <Box>
+                    {feedsLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : disruptionFeeds.length > 0 ? (
+                      <Box sx={{ height: 400, width: '100%' }}>
+                        <AgGridReact<DisruptionFeed>
+                          rowData={disruptionFeeds}
+                          columnDefs={feedsColumnDefs}
+                          defaultColDef={defaultColDef}
+                          theme={themeQuartz}
+                          domLayout="autoHeight"
+                        />
+                      </Box>
+                    ) : (
+                      <Typography color="text.secondary">
+                        No disruption news feeds found for {selectedDate?.format('YYYY-MM-DD')}
                       </Typography>
                     )}
                   </Box>
