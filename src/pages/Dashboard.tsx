@@ -25,7 +25,9 @@ import FlightLandIcon from '@mui/icons-material/FlightLand'
 import AnnouncementIcon from '@mui/icons-material/Announcement'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import FlightIcon from '@mui/icons-material/Flight'
+import CampaignIcon from '@mui/icons-material/Campaign'
 import FlightsFunnel from '../components/FlightsFunnel'
+import Campaigns from '../components/Campaigns'
 import UnprocessedFlights from '../components/UnprocessedFlights'
 import CauseCodeMetrics from '../components/CauseCodeMetrics'
 import Weather from '../components/Weather'
@@ -43,6 +45,7 @@ const menuItems = [
   { id: 'weather', label: 'Weather', icon: <CloudIcon /> },
   { id: 'notams', label: 'NOTAMs', icon: <AnnouncementIcon /> },
   { id: 'disruption-cause', label: 'Disruption Cause', icon: <ReportProblemIcon /> },
+  { id: 'campaigns', label: 'Campaigns', icon: <CampaignIcon /> },
   { id: 'charts', label: 'Charts', icon: <BarChartIcon /> },
   { id: 'tables', label: 'Tables', icon: <TableChartIcon /> },
   { id: 'funnel', label: 'Funnel', icon: <FilterAltIcon /> },
@@ -213,6 +216,12 @@ export default function Dashboard() {
         {activeSection === 'disruption-cause' && (
           <Paper sx={{ p: { xs: 2, md: 3 } }}>
             <DisruptionCause />
+          </Paper>
+        )}
+
+        {activeSection === 'campaigns' && (
+          <Paper sx={{ p: { xs: 2, md: 3 } }}>
+            <Campaigns />
           </Paper>
         )}
 

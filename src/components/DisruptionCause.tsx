@@ -26,7 +26,7 @@ import dayjs, { Dayjs } from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, AllCommunityModule, themeQuartz } from 'ag-grid-community'
-import type { ColDef, ValueFormatterParams, ValueGetterParams, CellClassParams, RowClickedEvent, CellValueChangedEvent } from 'ag-grid-community'
+import type { ColDef, ValueFormatterParams, ValueGetterParams, CellClassParams, RowClickedEvent, CellValueChangedEvent, RowClassParams } from 'ag-grid-community'
 import { supabase } from '../lib/supabase'
 import Weather from './Weather'
 import AirportSituation from './AirportSituation'
@@ -312,6 +312,32 @@ export default function DisruptionCause() {
     if (value >= 180) return 'delay-severe'
     if (value >= 60) return 'delay-warning'
     if (value < 0) return 'delay-early'
+    return ''
+  }
+
+  // Determine row class based on creation timing
+  const getRowClass = (params: RowClassParams<DisruptedFlight>): string => {
+    const data = params.data
+    if (!data?.created_at || !data?.d_scheduled_time_utc) return ''
+
+    const createdAt = dayjs(data.created_at)
+    const departureTime = dayjs(data.d_scheduled_time_utc)
+    const arrivalTime = data.a_actual_time_utc
+      ? dayjs(data.a_actual_time_utc)
+      : data.a_scheduled_time_utc
+        ? dayjs(data.a_scheduled_time_utc)
+        : null
+
+    // Green: created before 2h of departure
+    if (createdAt.isBefore(departureTime.subtract(2, 'hour'))) {
+      return 'creation-on-time'
+    }
+
+    // Yellow: can still catch arrival (created before 15min of arrival)
+    if (arrivalTime && createdAt.isBefore(arrivalTime.subtract(15, 'minute'))) {
+      return 'creation-catch-arrival'
+    }
+
     return ''
   }
 
@@ -771,6 +797,12 @@ export default function DisruptionCause() {
               color: '#155724',
               fontWeight: 600,
             },
+            '& .creation-on-time': {
+              backgroundColor: 'rgba(76, 175, 80, 0.15) !important',
+            },
+            '& .creation-catch-arrival': {
+              backgroundColor: 'rgba(255, 193, 7, 0.2) !important',
+            },
           }}>
             <AgGridReact<DisruptedFlight>
               rowData={flightsData}
@@ -784,6 +816,7 @@ export default function DisruptionCause() {
               onCellValueChanged={handleCellValueChanged}
               rowSelection="single"
               stopEditingWhenCellsLoseFocus={true}
+              getRowClass={getRowClass}
             />
           </Box>
 
