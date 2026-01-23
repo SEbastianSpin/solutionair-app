@@ -510,8 +510,10 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     for (const flight of flightsData) {
       const scheduledTime = dayjs(flight.scheduled_time_utc).utc()
       const hour = scheduledTime.hour() + scheduledTime.minute() / 60
-      const isCancelled = flight.flight_status?.toLowerCase() === 'canceled'
-      const delay = isCancelled ? 300 : (flight.delay_minutes ?? 0)
+      const statusLower = flight.flight_status?.toLowerCase() || ''
+      const isCancelled = statusLower === 'canceled' || statusLower === 'cancelled'
+      const isDiverted = statusLower.includes('divert')
+      const delay = isDiverted ? 310 : isCancelled ? 300 : (flight.delay_minutes ?? 0)
 
       const airlineName = flight.airline_iata || flight.airline_name || 'Unknown'
       const flightType = flight.flight_type?.toLowerCase() || 'unknown'
@@ -580,8 +582,10 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
     const points = flightsData.map((flight) => {
       const scheduledTime = dayjs(flight.scheduled_time_utc).utc()
       const hour = scheduledTime.hour() + scheduledTime.minute() / 60
-      const isCancelled = flight.flight_status?.toLowerCase() === 'canceled'
-      const delay = isCancelled ? 300 : (flight.delay_minutes ?? 0)
+      const statusLower = flight.flight_status?.toLowerCase() || ''
+      const isCancelled = statusLower === 'canceled' || statusLower === 'cancelled'
+      const isDiverted = statusLower.includes('divert')
+      const delay = isDiverted ? 310 : isCancelled ? 300 : (flight.delay_minutes ?? 0)
       return { x: hour, y: delay }
     }).sort((a, b) => a.x - b.x)
 
@@ -719,7 +723,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
 
             <Box sx={{ height: 350, width: '100%', mb: 3 }}>
               <Typography variant="subtitle2" gutterBottom>
-                Delay Distribution (Cancelled = 300 min) — Ctrl+scroll to zoom, drag to pan, double-click to reset
+                Delay Distribution (Cancelled = 300 min, Diverted = 310 min) — Ctrl+scroll to zoom, drag to pan, double-click to reset
               </Typography>
               <Box
                 ref={chartContainerRef}
@@ -788,7 +792,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
                         Time: {Math.floor(node.data.x as number)}:{String(Math.round(((node.data.x as number) % 1) * 60)).padStart(2, '0')}
                       </Typography>
                       <Typography variant="body2">
-                        {data.status?.toLowerCase() === 'canceled' ? 'Cancelled' : `Delay: ${node.data.y} min`}
+                        {data.status?.toLowerCase()?.includes('divert') ? 'Diverted' : data.status?.toLowerCase() === 'canceled' || data.status?.toLowerCase() === 'cancelled' ? 'Cancelled' : `Delay: ${node.data.y} min`}
                       </Typography>
                     </Box>
                   )
