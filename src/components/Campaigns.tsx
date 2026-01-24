@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import {
   Alert,
   Box,
@@ -16,6 +16,7 @@ import type { SelectChangeEvent } from '@mui/material'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
+import { TimePicker } from '@mui/x-date-pickers/TimePicker'
 import dayjs, { Dayjs } from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import { AgGridReact } from 'ag-grid-react'
@@ -269,6 +270,72 @@ function transformToNivoData(gridData: PassengerGridRow[], flights: CampaignFlig
   return series
 }
 
+// Custom Time Picker Cell Editor for AG Grid
+interface TimePickerEditorProps {
+  value: string | null
+  data: Campaign
+  stopEditing: () => void
+  onValueChange: (value: string | null) => void
+}
+
+interface TimePickerEditorRef {
+  getValue: () => string | null
+}
+
+const TimePickerEditor = forwardRef<TimePickerEditorRef, TimePickerEditorProps>(
+  ({ value, data, stopEditing, onValueChange }, ref) => {
+    // Get base date from existing value or scheduled departure
+    const baseDate = value ? dayjs(value).utc() : dayjs(data.d_scheduled_time_utc).utc()
+    const [selectedTime, setSelectedTime] = useState<Dayjs | null>(value ? dayjs(value).utc() : null)
+
+    useImperativeHandle(ref, () => ({
+      getValue: () => {
+        if (!selectedTime) return null
+        // Merge selected time with base date
+        const newDateTime = baseDate
+          .hour(selectedTime.hour())
+          .minute(selectedTime.minute())
+          .second(0)
+        return newDateTime.toISOString()
+      },
+    }))
+
+    const handleChange = (newTime: Dayjs | null) => {
+      setSelectedTime(newTime)
+      if (newTime) {
+        const newDateTime = baseDate
+          .hour(newTime.hour())
+          .minute(newTime.minute())
+          .second(0)
+        onValueChange(newDateTime.toISOString())
+      } else {
+        onValueChange(null)
+      }
+    }
+
+    return (
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <TimePicker
+          value={selectedTime}
+          onChange={handleChange}
+          onAccept={() => stopEditing()}
+          ampm={false}
+          slotProps={{
+            textField: {
+              size: 'small',
+              autoFocus: true,
+              sx: { width: 130 },
+            },
+            popper: {
+              placement: 'bottom-start',
+            },
+          }}
+        />
+      </LocalizationProvider>
+    )
+  }
+)
+
 const STATUS_OPTIONS: { value: CampaignStatus; label: string }[] = [
   { value: 'ALL', label: 'All Statuses' },
   { value: 'PENDING_REVIEW', label: 'Pending Review' },
@@ -368,13 +435,16 @@ export default function Campaigns() {
     const { data, colDef, newValue } = event
     if (!data || !colDef.field) return
 
-    const field = colDef.field as 'campaign_status' | 'campaign_status_comments'
+    const field = colDef.field as 'campaign_status' | 'campaign_status_comments' | 'ad_window_start' | 'ad_window_end'
     const campaignId = data.campaign_id
+
+    // TimePicker editor returns ISO string or null directly
+    const valueToSave = newValue || null
 
     setPendingChanges(prev => {
       const newMap = new Map(prev)
       const existing = newMap.get(campaignId) || {}
-      newMap.set(campaignId, { ...existing, [field]: newValue })
+      newMap.set(campaignId, { ...existing, [field]: valueToSave })
       return newMap
     })
   }, [])
@@ -492,7 +562,8 @@ export default function Campaigns() {
 
     // Don't trigger if clicking on checkbox (no field) or editable cells
     const column = event.colDef?.field
-    if (!column || column === 'campaign_status' || column === 'campaign_status_comments') {
+    const editableColumns = ['campaign_status', 'campaign_status_comments', 'ad_window_start', 'ad_window_end']
+    if (!column || editableColumns.includes(column)) {
       return
     }
 
@@ -610,7 +681,10 @@ export default function Campaigns() {
       sortable: true,
       flex: 1,
       minWidth: 140,
-      valueFormatter: (params: ValueFormatterParams) => formatDateTime(params.value),
+      editable: true,
+      cellEditor: TimePickerEditor,
+      cellEditorPopup: true,
+      valueFormatter: (params: ValueFormatterParams) => params.value ? dayjs(params.value).utc().format('HH:mm') : '--',
     },
     {
       field: 'ad_window_end',
@@ -619,7 +693,10 @@ export default function Campaigns() {
       sortable: true,
       flex: 1,
       minWidth: 140,
-      valueFormatter: (params: ValueFormatterParams) => formatDateTime(params.value),
+      editable: true,
+      cellEditor: TimePickerEditor,
+      cellEditorPopup: true,
+      valueFormatter: (params: ValueFormatterParams) => params.value ? dayjs(params.value).utc().format('HH:mm') : '--',
     },
     {
       field: 'min_pax_est',
@@ -919,7 +996,7 @@ export default function Campaigns() {
       </Box>
 
       {/* Mass Update Controls */}
-      {selectedRows.length > 0 && (
+      {selectedRows.length > 1 && (
         <Box sx={{
           display: 'flex',
           gap: 2,
