@@ -32,6 +32,7 @@ import AttachFileIcon from '@mui/icons-material/AttachFile'
 import HistoryIcon from '@mui/icons-material/History'
 import CloseIcon from '@mui/icons-material/Close'
 import TimerIcon from '@mui/icons-material/Timer'
+import FilterListIcon from '@mui/icons-material/FilterList'
 import { AgGridReact } from 'ag-grid-react'
 import { ModuleRegistry, AllCommunityModule, themeQuartz } from 'ag-grid-community'
 import type { ColDef, ValueFormatterParams } from 'ag-grid-community'
@@ -101,6 +102,7 @@ export default function Cases() {
   const [editOtherAmount, setEditOtherAmount] = useState('')
   const [editOtherNotes, setEditOtherNotes] = useState('')
   const [amountsSaving, setAmountsSaving] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string>('ALL')
 
   const CASE_STATUSES = [
     'NEW',
@@ -273,10 +275,16 @@ export default function Cases() {
     async function fetchCases() {
       setLoading(true)
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('cases')
           .select('*')
           .order('created_at', { ascending: false })
+
+        if (statusFilter !== 'ALL') {
+          query = query.eq('case_status', statusFilter)
+        }
+
+        const { data, error } = await query
 
         if (error) {
           console.error('Error fetching cases:', error)
@@ -293,7 +301,7 @@ export default function Cases() {
     }
 
     fetchCases()
-  }, [])
+  }, [statusFilter])
 
   // Fetch status change dates for all cases
   useEffect(() => {
@@ -663,9 +671,32 @@ export default function Cases() {
 
   return (
     <Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        Found {casesData.length} case(s)
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="status-filter-label">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <FilterListIcon sx={{ fontSize: 18 }} />
+              Status
+            </Box>
+          </InputLabel>
+          <Select
+            labelId="status-filter-label"
+            value={statusFilter}
+            label="Status Filter"
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <MenuItem value="ALL">All Statuses</MenuItem>
+            {CASE_STATUSES.map((status) => (
+              <MenuItem key={status} value={status}>
+                {status}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Typography variant="body2" color="text.secondary">
+          Found {casesData.length} case(s)
+        </Typography>
+      </Box>
       <Box sx={{ height: 600, width: '100%' }}>
         <AgGridReact<Case>
           rowData={casesData}
