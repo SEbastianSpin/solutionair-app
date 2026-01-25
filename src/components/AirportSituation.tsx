@@ -746,7 +746,7 @@ export default function AirportSituation({ iata, date }: AirportSituationProps) 
                   legend: 'Time (Hour UTC)',
                   legendPosition: 'middle',
                   legendOffset: 40,
-                  tickValues: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,12, 15, 18, 21, 24],
+                  tickValues: [0, 3, 6, 9, 12, 15, 18, 21, 24],
                   format: (value) => `${value}:00`,
                 }}
                 axisLeft={{
