@@ -27,7 +27,9 @@ import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import FlightIcon from '@mui/icons-material/Flight'
 import CampaignIcon from '@mui/icons-material/Campaign'
 import FolderIcon from '@mui/icons-material/Folder'
+import ArticleIcon from '@mui/icons-material/Article'
 import FlightsFunnel from '../components/FlightsFunnel'
+import Blog from '../components/Blog'
 import Cases from '../components/Cases'
 import Campaigns from '../components/Campaigns'
 import UnprocessedFlights from '../components/UnprocessedFlights'
@@ -49,6 +51,7 @@ const menuItems = [
   { id: 'disruption-cause', label: 'Disruption Cause', icon: <ReportProblemIcon /> },
   { id: 'campaigns', label: 'Campaigns', icon: <CampaignIcon /> },
   { id: 'cases', label: 'Cases', icon: <FolderIcon /> },
+  { id: 'blog', label: 'Blog', icon: <ArticleIcon /> },
   { id: 'charts', label: 'Charts', icon: <BarChartIcon /> },
   { id: 'tables', label: 'Tables', icon: <TableChartIcon /> },
   { id: 'funnel', label: 'Funnel', icon: <FilterAltIcon /> },
@@ -231,6 +234,12 @@ export default function Dashboard() {
         {activeSection === 'cases' && (
           <Paper sx={{ p: { xs: 2, md: 3 } }}>
             <Cases />
+          </Paper>
+        )}
+
+        {activeSection === 'blog' && (
+          <Paper sx={{ p: { xs: 2, md: 3 } }}>
+            <Blog />
           </Paper>
         )}
 
